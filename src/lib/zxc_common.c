@@ -25,9 +25,6 @@
  * ============================================================================
  */
 
-/* Round @p x up to the next cache-line boundary. */
-#define ZXC_ALIGN_CL(x) (((x) + ZXC_ALIGNMENT_MASK) & ~(size_t)ZXC_ALIGNMENT_MASK)
-
 /*
  * @brief Allocates memory aligned to the specified boundary.
  *
@@ -161,6 +158,11 @@ void zxc_cctx_free(zxc_cctx_t* ctx) {
         ctx->work_buf = NULL;
     }
 
+    if (ctx->opt_scratch) {
+        zxc_aligned_free(ctx->opt_scratch);
+        ctx->opt_scratch = NULL;
+    }
+
     ctx->hash_table = NULL;
     ctx->hash_tags = NULL;
     ctx->chain_table = NULL;
@@ -173,6 +175,7 @@ void zxc_cctx_free(zxc_cctx_t* ctx) {
     ctx->epoch = 0;
     ctx->lit_buffer_cap = 0;
     ctx->work_buf_cap = 0;
+    ctx->opt_scratch_cap = 0;
 }
 
 /*
@@ -629,11 +632,17 @@ uint64_t zxc_decompress_block_bound(const size_t uncompressed_size) {
 /*
  * @brief Estimates the total buffer bytes allocated inside a cctx for a block.
  *
- * Mirrors the allocation layout in zxc_cctx_init(): each sub-buffer is rounded
- * up to the cache-line boundary, so the returned value matches the single
- * aligned allocation performed by the initializer.
+ * Mirrors the persistent allocation layout in zxc_cctx_init(): each sub-buffer
+ * is rounded up to the cache-line boundary, so the returned value matches the
+ * single aligned allocation performed by the initializer.
+ *
+ * For @p level >= 6 the figure also includes ctx->opt_scratch (~8.125 bytes
+ * per chunk_size byte: dp + parent_len + parent_off + a 1-bit-per-position
+ * match-end bitmap), the cache-line-aligned scratch used by the optimal
+ * parser. It is lazy-allocated on the first level-6 call and persists for
+ * the lifetime of the cctx (no per-block malloc/free).
  */
-uint64_t zxc_estimate_cctx_size(const size_t src_size) {
+uint64_t zxc_estimate_cctx_size(const size_t src_size, const int level) {
     if (UNLIKELY(src_size == 0)) return 0;
 
     const size_t chunk_size = zxc_block_size_ceil(src_size);
@@ -653,6 +662,19 @@ uint64_t zxc_estimate_cctx_size(const size_t src_size) {
     /* The opaque wrapper struct allocated by zxc_create_cctx() adds a tiny
      * fixed overhead (< 128 B) that is negligible next to the per-chunk
      * buffers above and is intentionally omitted. */
+
+    if (level >= ZXC_LEVEL_DENSITY) {
+        const size_t n_bm_words = (chunk_size + 1 + 63) / 64;
+        size_t opt = ZXC_ALIGN_CL((chunk_size + 1) * sizeof(uint32_t)); /* dp             */
+        opt += ZXC_ALIGN_CL((chunk_size + 1) * sizeof(uint16_t));       /* parent_len     */
+        opt += ZXC_ALIGN_CL((chunk_size + 1) * sizeof(uint16_t));       /* parent_off     */
+        opt += ZXC_ALIGN_CL(n_bm_words * sizeof(uint64_t));             /* match_end_bits */
+        /* opt_scratch is sized to hold both the DP arrays and (transiently)
+         * the package-merge scratch for the Huffman code-length builder;
+         * report the larger of the two. */
+        const size_t huf = ZXC_ALIGN_CL(ZXC_HUF_BUILD_SCRATCH_SIZE);
+        total += (opt > huf) ? opt : huf;
+    }
 
     return total;
 }
@@ -725,9 +747,9 @@ int zxc_min_level(void) { return ZXC_LEVEL_FASTEST; }
 /*
  * @brief Returns the maximum supported compression level.
  *
- * Returns the value of ZXC_LEVEL_COMPACT (currently 5).
+ * Returns the value of ZXC_LEVEL_DENSITY (currently 6).
  */
-int zxc_max_level(void) { return ZXC_LEVEL_COMPACT; }
+int zxc_max_level(void) { return ZXC_LEVEL_DENSITY; }
 
 /*
  * @brief Returns the default compression level.

@@ -67,7 +67,7 @@ ZXC_EXPORT int zxc_min_level(void);
 /**
  * @brief Returns the maximum supported compression level.
  *
- * Currently returns @ref ZXC_LEVEL_COMPACT (5).
+ * Currently returns @ref ZXC_LEVEL_DENSITY (6).
  *
  * @return Maximum compression level value.
  */
@@ -308,19 +308,26 @@ ZXC_EXPORT int64_t zxc_decompress_block_safe(zxc_dctx* dctx, const void* src, co
                                              const zxc_decompress_opts_t* opts);
 
 /**
- * @brief Estimates the memory allocated by a compression context for a given block.
+ * @brief Estimates the peak memory used by compression for a given block & level.
  *
  * Returns the total bytes reserved by @ref zxc_compress_block for a block of
  * @p src_size bytes: all per-chunk working buffers (chain table, literals,
  * sequence/token/offset/extras buffers) plus the fixed hash tables and
- * cache-line alignment padding. Scales roughly linearly with @p src_size.
+ * cache-line alignment padding. At @p level >= 6 the value also includes the
+ * `opt_scratch` region (~8.125 x @p src_size bytes) used by the price-based
+ * optimal parser. That region is lazy-allocated on the first level-6 call
+ * and reused across blocks for the lifetime of the cctx. Scales roughly
+ * linearly with @p src_size.
  *
- * Intended for integrators that need an accurate memory-budget figure
+ * Intended for integrators that need an accurate memory-budget figure.
  *
  * @param[in] src_size Uncompressed block size in bytes.
- * @return Estimated cctx memory usage in bytes, or 0 if @p src_size is 0.
+ * @param[in] level    Compression level (1..6). Levels <= 5 share the same
+ *                     persistent cctx footprint; level 6 adds the optimal-
+ *                     parser scratch.
+ * @return Estimated peak cctx memory usage in bytes, or 0 if @p src_size is 0.
  */
-ZXC_EXPORT uint64_t zxc_estimate_cctx_size(size_t src_size);
+ZXC_EXPORT uint64_t zxc_estimate_cctx_size(size_t src_size, int level);
 
 /** @} */ /* end of block_api */
 

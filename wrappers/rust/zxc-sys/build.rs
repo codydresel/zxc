@@ -52,7 +52,7 @@ fn extract_version(include_dir: &Path) -> (u32, u32, u32) {
 }
 
 /// Extract compression level constants from zxc_constants.h
-fn extract_compression_levels(include_dir: &Path) -> (i32, i32, i32, i32, i32) {
+fn extract_compression_levels(include_dir: &Path) -> (i32, i32, i32, i32, i32, i32) {
     let header_path = include_dir.join("zxc_constants.h");
     let content = fs::read_to_string(&header_path)
         .expect("Failed to read zxc_constants.h");
@@ -62,10 +62,11 @@ fn extract_compression_levels(include_dir: &Path) -> (i32, i32, i32, i32, i32) {
     let mut default = None;
     let mut balanced = None;
     let mut compact = None;
+    let mut density = None;
 
     for line in content.lines() {
         let trimmed = line.trim();
-        
+
         // Parse lines like: ZXC_LEVEL_FASTEST = 1,
         if trimmed.starts_with("ZXC_LEVEL_") {
             let parts: Vec<&str> = trimmed.split('=').collect();
@@ -74,13 +75,14 @@ fn extract_compression_levels(include_dir: &Path) -> (i32, i32, i32, i32, i32) {
                 // Extract number, removing comma and comments
                 let value_str = parts[1].split(&[',', '/'][..]).next().unwrap().trim();
                 let value: Option<i32> = value_str.parse().ok();
-                
+
                 match name {
                     "ZXC_LEVEL_FASTEST" => fastest = value,
                     "ZXC_LEVEL_FAST" => fast = value,
                     "ZXC_LEVEL_DEFAULT" => default = value,
                     "ZXC_LEVEL_BALANCED" => balanced = value,
                     "ZXC_LEVEL_COMPACT" => compact = value,
+                    "ZXC_LEVEL_DENSITY" => density = value,
                     _ => {}
                 }
             }
@@ -93,6 +95,7 @@ fn extract_compression_levels(include_dir: &Path) -> (i32, i32, i32, i32, i32) {
         default.expect("ZXC_LEVEL_DEFAULT not found"),
         balanced.expect("ZXC_LEVEL_BALANCED not found"),
         compact.expect("ZXC_LEVEL_COMPACT not found"),
+        density.expect("ZXC_LEVEL_DENSITY not found"),
     )
 }
 
@@ -141,12 +144,14 @@ fn main() {
     println!("cargo:rustc-env=ZXC_VERSION_PATCH={}", patch);
 
     // Extract compression levels from header and make them available to lib.rs
-    let (fastest, fast, default, balanced, compact) = extract_compression_levels(&include_dir);
+    let (fastest, fast, default, balanced, compact, density) =
+        extract_compression_levels(&include_dir);
     println!("cargo:rustc-env=ZXC_LEVEL_FASTEST={}", fastest);
     println!("cargo:rustc-env=ZXC_LEVEL_FAST={}", fast);
     println!("cargo:rustc-env=ZXC_LEVEL_DEFAULT={}", default);
     println!("cargo:rustc-env=ZXC_LEVEL_BALANCED={}", balanced);
     println!("cargo:rustc-env=ZXC_LEVEL_COMPACT={}", compact);
+    println!("cargo:rustc-env=ZXC_LEVEL_DENSITY={}", density);
 
     let target = env::var("TARGET").unwrap_or_default();
     let is_arm64 = target.contains("aarch64") || target.contains("arm64");
@@ -197,6 +202,17 @@ fn main() {
         .opt_level(3)
         .warnings(false);
 
+    let mut default_huffman = cc::Build::new();
+    default_huffman
+        .include(&include_dir)
+        .include(&src_lib)
+        .include(src_lib.join("vendors"))
+        .define("ZXC_STATIC_DEFINE", None)
+        .file(src_lib.join("zxc_huffman.c"))
+        .define("ZXC_FUNCTION_SUFFIX", "_default")
+        .opt_level(3)
+        .warnings(false);
+
     // Add architecture-specific flags to core build BEFORE compiling
     if is_arm64 {
         core_build.flag_if_supported("-march=armv8-a+crc");
@@ -210,6 +226,7 @@ fn main() {
     // Compile defaults
     default_compress.compile("zxc_compress_default");
     default_decompress.compile("zxc_decompress_default");
+    default_huffman.compile("zxc_huffman_default");
 
     // --- Architecture-specific variants ---
     if is_arm64 {
@@ -238,8 +255,21 @@ fn main() {
             .opt_level(3)
             .warnings(false);
 
+        let mut neon_huffman = cc::Build::new();
+        neon_huffman
+            .include(&include_dir)
+            .include(&src_lib)
+            .include(src_lib.join("vendors"))
+            .define("ZXC_STATIC_DEFINE", None)
+            .file(src_lib.join("zxc_huffman.c"))
+            .define("ZXC_FUNCTION_SUFFIX", "_neon")
+            .flag_if_supported("-march=armv8-a+simd")
+            .opt_level(3)
+            .warnings(false);
+
         neon_compress.compile("zxc_compress_neon");
         neon_decompress.compile("zxc_decompress_neon");
+        neon_huffman.compile("zxc_huffman_neon");
     } else if is_x86_64 {
         // AVX2 variant
         let mut avx2_compress = cc::Build::new();
@@ -270,8 +300,23 @@ fn main() {
             .opt_level(3)
             .warnings(false);
 
+        let mut avx2_huffman = cc::Build::new();
+        avx2_huffman
+            .include(&include_dir)
+            .include(&src_lib)
+            .include(src_lib.join("vendors"))
+            .define("ZXC_STATIC_DEFINE", None)
+            .file(src_lib.join("zxc_huffman.c"))
+            .define("ZXC_FUNCTION_SUFFIX", "_avx2")
+            .flag_if_supported("-mavx2")
+            .flag_if_supported("-mfma")
+            .flag_if_supported("-mbmi2")
+            .opt_level(3)
+            .warnings(false);
+
         avx2_compress.compile("zxc_compress_avx2");
         avx2_decompress.compile("zxc_decompress_avx2");
+        avx2_huffman.compile("zxc_huffman_avx2");
 
         // AVX512 variant
         let mut avx512_compress = cc::Build::new();
@@ -302,8 +347,23 @@ fn main() {
             .opt_level(3)
             .warnings(false);
 
+        let mut avx512_huffman = cc::Build::new();
+        avx512_huffman
+            .include(&include_dir)
+            .include(&src_lib)
+            .include(src_lib.join("vendors"))
+            .define("ZXC_STATIC_DEFINE", None)
+            .file(src_lib.join("zxc_huffman.c"))
+            .define("ZXC_FUNCTION_SUFFIX", "_avx512")
+            .flag_if_supported("-mavx512f")
+            .flag_if_supported("-mavx512bw")
+            .flag_if_supported("-mbmi2")
+            .opt_level(3)
+            .warnings(false);
+
         avx512_compress.compile("zxc_compress_avx512");
         avx512_decompress.compile("zxc_decompress_avx512");
+        avx512_huffman.compile("zxc_huffman_avx512");
     }
 
     // Threading support (not needed on Windows, which uses kernel32)

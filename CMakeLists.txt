@@ -39,7 +39,7 @@ option(ZXC_DISABLE_SIMD "Disable explicit SIMD intrinsics (no AVX/NEON code path
 # Emscripten / WebAssembly overrides
 # =============================================================================
 if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-    message(STATUS "Emscripten detected — configuring for WebAssembly.")
+    message(STATUS "Emscripten detected - configuring for WebAssembly.")
     set(ZXC_DISABLE_SIMD ON  CACHE BOOL "" FORCE)
     set(ZXC_BUILD_CLI    OFF CACHE BOOL "" FORCE)
     set(ZXC_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
@@ -137,48 +137,33 @@ macro(zxc_apply_pgo target)
 endmacro()
 
 # Function Multi-Versioning Helper
-# Compiles src/lib/zxc_compress.c and src/lib/zxc_decompress.c with specific flags and suffix.
+# Compiles compress/decompress/huffman with specific flags and suffix so the
+# runtime dispatcher can route to a BMI2/AVX2/AVX512/NEON-aware Huffman codec
+# in addition to the LZ77 stages.
 macro(zxc_add_variant suffix flags)
-    add_library(zxc_compress${suffix} OBJECT src/lib/zxc_compress.c)
-    target_compile_options(zxc_compress${suffix} PRIVATE ${flags})
-    target_compile_definitions(zxc_compress${suffix} PRIVATE ZXC_FUNCTION_SUFFIX=${suffix})
-    # For static builds, define ZXC_STATIC_DEFINE
-    if(NOT BUILD_SHARED_LIBS)
-        target_compile_definitions(zxc_compress${suffix} PRIVATE ZXC_STATIC_DEFINE)
-    else()
-        # Mark as part of the DLL being built (avoids dllimport on internal symbols)
-        target_compile_definitions(zxc_compress${suffix} PRIVATE zxc_lib_EXPORTS)
-        set_target_properties(zxc_compress${suffix} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-        # Hide variant symbols from shared library public ABI
-        if(NOT MSVC)
-            target_compile_options(zxc_compress${suffix} PRIVATE -fvisibility=hidden)
+    foreach(_src compress decompress huffman)
+        add_library(zxc_${_src}${suffix} OBJECT src/lib/zxc_${_src}.c)
+        target_compile_options(zxc_${_src}${suffix} PRIVATE ${flags})
+        target_compile_definitions(zxc_${_src}${suffix} PRIVATE ZXC_FUNCTION_SUFFIX=${suffix})
+        # For static builds, define ZXC_STATIC_DEFINE
+        if(NOT BUILD_SHARED_LIBS)
+            target_compile_definitions(zxc_${_src}${suffix} PRIVATE ZXC_STATIC_DEFINE)
+        else()
+            # Mark as part of the DLL being built (avoids dllimport on internal symbols)
+            target_compile_definitions(zxc_${_src}${suffix} PRIVATE zxc_lib_EXPORTS)
+            set_target_properties(zxc_${_src}${suffix} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+            # Hide variant symbols from shared library public ABI
+            if(NOT MSVC)
+                target_compile_options(zxc_${_src}${suffix} PRIVATE -fvisibility=hidden)
+            endif()
         endif()
-    endif()
-    # Inherit include directories
-    target_include_directories(zxc_compress${suffix} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/lib ${RAPIDHASH_INCLUDE_DIR} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+        # Inherit include directories
+        target_include_directories(zxc_${_src}${suffix} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/lib ${RAPIDHASH_INCLUDE_DIR} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+        # Propagate PGO flags to variant objects
+        zxc_apply_pgo(zxc_${_src}${suffix})
 
-    add_library(zxc_decompress${suffix} OBJECT src/lib/zxc_decompress.c)
-    target_compile_options(zxc_decompress${suffix} PRIVATE ${flags})
-    target_compile_definitions(zxc_decompress${suffix} PRIVATE ZXC_FUNCTION_SUFFIX=${suffix})
-    # For static builds, define ZXC_STATIC_DEFINE
-    if(NOT BUILD_SHARED_LIBS)
-        target_compile_definitions(zxc_decompress${suffix} PRIVATE ZXC_STATIC_DEFINE)
-    else()
-        # Mark as part of the DLL being built (avoids dllimport on internal symbols)
-        target_compile_definitions(zxc_decompress${suffix} PRIVATE zxc_lib_EXPORTS)
-        set_target_properties(zxc_decompress${suffix} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-        # Hide variant symbols from shared library public ABI
-        if(NOT MSVC)
-            target_compile_options(zxc_decompress${suffix} PRIVATE -fvisibility=hidden)
-        endif()
-    endif()
-    target_include_directories(zxc_decompress${suffix} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/lib ${RAPIDHASH_INCLUDE_DIR} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
-
-    # Propagate PGO flags to variant objects
-    zxc_apply_pgo(zxc_compress${suffix})
-    zxc_apply_pgo(zxc_decompress${suffix})
-
-    list(APPEND ZXC_VARIANT_OBJECTS $<TARGET_OBJECTS:zxc_compress${suffix}> $<TARGET_OBJECTS:zxc_decompress${suffix}>)
+        list(APPEND ZXC_VARIANT_OBJECTS $<TARGET_OBJECTS:zxc_${_src}${suffix}>)
+    endforeach()
 endmacro()
 
 set(ZXC_VARIANT_OBJECTS "")
@@ -220,7 +205,8 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
 endif()
 endif()
 
-# Sources: exclude zxc_driver.c for Emscripten (requires pthreads + FILE* I/O)
+# Sources: exclude zxc_driver.c for Emscripten (requires pthreads + FILE* I/O).
+# zxc_huffman.c lives in the per-variant build (see zxc_add_variant).
 if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     set(ZXC_CORE_SOURCES
         src/lib/zxc_common.c
@@ -433,7 +419,9 @@ if(ZXC_BUILD_TESTS)
     # When building shared libraries, create a static version for tests
     # This allows tests to access internal functions for unit testing
     if(BUILD_SHARED_LIBS)
-        # Create a static library specifically for tests
+        # Create a static library specifically for tests.
+        # zxc_huffman.c lives in the per-variant build (see zxc_add_variant)
+        # and is already pulled in via ${ZXC_VARIANT_OBJECTS} below.
         add_library(zxc_lib_static STATIC
             src/lib/zxc_common.c
             src/lib/zxc_driver.c
