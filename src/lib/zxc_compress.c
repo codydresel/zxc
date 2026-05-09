@@ -194,20 +194,20 @@ static ZXC_ALWAYS_INLINE zxc_match_t zxc_lz77_find_best_match(
     // Current position in the input buffer expressed as a 32-bit index.
     const uint32_t cur_pos = (uint32_t)(ip - src);
 
-    // Split table reads: tag table + position table
+    // Tag-first filter on fast levels.
     const uint8_t stored_tag = hash_tags[h];
-    const uint32_t raw_head = hash_table[h];
+    uint32_t match_idx;
+    if (level <= ZXC_LEVEL_FAST && stored_tag != cur_tag) {
+        match_idx = 0;
+    } else {
+        const uint32_t raw_head = hash_table[h];
+        match_idx = ((raw_head & ~offset_mask) == epoch_mark) ? (raw_head & offset_mask) : 0;
+    }
 
-    // If the epoch in raw_head matches the current epoch_mark, extract the
-    // stored position; otherwise treat this bucket as empty (index 0).
-    uint32_t match_idx = ((raw_head & ~offset_mask) == epoch_mark) ? (raw_head & offset_mask) : 0;
-
-    // Decide whether to skip the head entry of the hash chain.
+    // skip_head still drives the chain walk on level >= 3 (advances past the
+    // mismatched head without comparing). On level <= 2 it is always 0 here:
+    // either match_idx == 0 (filter-skip) or stored_tag == cur_tag.
     const int skip_head = (match_idx != 0) & (stored_tag != cur_tag);
-
-    // If we should skip the head and level is low (<= 2), we drop the match entirely.
-    const uint32_t drop_mask = (uint32_t)((skip_head & (level <= 2)) - 1);
-    match_idx &= drop_mask;
 
     // Split table writes
     hash_table[h] = epoch_mark | cur_pos;
@@ -1223,6 +1223,14 @@ static int zxc_encode_block_glo(zxc_cctx_t* RESTRICT ctx, const uint8_t* RESTRIC
         size_t step = lzp.step_base + (dist >> lzp.step_shift);
         if (UNLIKELY(ip + step >= mflimit)) step = 1;
 
+        if (LIKELY(ip + step + sizeof(uint64_t) <= iend)) {
+            const uint64_t v_next = zxc_le64(ip + step);
+            // cppcheck-suppress unreadVariable
+            const uint32_t h_next = zxc_hash_func(v_next, 1);
+            ZXC_PREFETCH_READ(&hash_tags[h_next]);
+            ZXC_PREFETCH_READ(&hash_table[h_next]);
+        }
+
         const zxc_match_t m =
             zxc_lz77_find_best_match(src, ip, iend, mflimit, anchor, hash_table, hash_tags,
                                      chain_table, epoch_mark, offset_mask, level, lzp);
@@ -1267,8 +1275,7 @@ static int zxc_encode_block_glo(zxc_cctx_t* RESTRICT ctx, const uint8_t* RESTRIC
                     const uint32_t pos_u = (uint32_t)((match_end - 2) - src);
                     const uint64_t val_u8 = zxc_le64(match_end - 2);
                     const uint32_t val_u = (uint32_t)val_u8;
-                    const uint32_t h_u =
-                        zxc_hash_func(val_u8, 1);  // Only for level > 4, uses hash5
+                    const uint32_t h_u = zxc_hash_func(val_u8, 1);
                     const uint32_t prev_head = hash_table[h_u];
                     const uint32_t prev_idx =
                         (prev_head & ~offset_mask) == epoch_mark ? (prev_head & offset_mask) : 0;
@@ -1788,6 +1795,14 @@ static int zxc_encode_block_ghi(zxc_cctx_t* RESTRICT ctx, const uint8_t* RESTRIC
         if (UNLIKELY(ip + step >= mflimit)) step = 1;
 
         ZXC_PREFETCH_READ(ip + step * 4 + ZXC_CACHE_LINE_SIZE);
+
+        if (LIKELY(ip + step + sizeof(uint64_t) <= iend)) {
+            const uint64_t v_next = zxc_le64(ip + step);
+            // cppcheck-suppress unreadVariable
+            const uint32_t h_next = zxc_hash_func(v_next, 0);
+            ZXC_PREFETCH_READ(&hash_tags[h_next]);
+            ZXC_PREFETCH_READ(&hash_table[h_next]);
+        }
 
         const zxc_match_t m =
             zxc_lz77_find_best_match(src, ip, iend, mflimit, anchor, hash_table, hash_tags,
