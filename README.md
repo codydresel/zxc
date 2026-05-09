@@ -76,22 +76,6 @@ We monitor metrics on both **x86_64** (Linux) and **ARM64** (Apple Silicon M2) r
 | **3. High Density** | **ZXC -5** vs *Zstd --fast 1* | **6,245 MB/s** vs 2,542 MB/s **2.46x Faster** | **40.3** vs 41.0 **Equivalent** (-0.7%) | **ZXC** outperforms Zstd in decoding speed. |
 | **4. Max Density** | **ZXC -6** vs *lz4hc -9* | **5,621 MB/s** vs 4,529 MB/s **1.24x Faster** | **36.3** vs 36.8 **Smaller** (-0.5%) | **ZXC** beats lz4hc on both decode speed and ratio. |
 
-**Effective Throughput** *(ratio-normalized decode — original MB/s delivered per unit of compressed input bandwidth, `decode × 100/ratio`)*
-
-| Compressor | Decode | Ratio | Effective | vs LZ4 |
-| :--- | ---: | ---: | ---: | ---: |
-| **ZXC -1** | 12,521 MB/s | 61.5 | **20,359 MB/s** | **2.03x** |
-| **ZXC -3** |  7,051 MB/s | 45.8 | **15,399 MB/s** | **1.53x** |
-| **ZXC -5** |  6,245 MB/s | 40.3 | **15,508 MB/s** | **1.54x** |
-| **ZXC -6** |  5,621 MB/s | 36.3 | **15,493 MB/s** | **1.54x** |
-| lz4 (Ref)         |  4,782 MB/s | 47.6 | 10,046 MB/s | 1.00x |
-| lz4 --fast -17    |  5,621 MB/s | 62.2 |  9,044 MB/s | 0.90x |
-| lz4hc -9          |  4,529 MB/s | 36.8 | 12,324 MB/s | 1.23x |
-| zstd --fast --1   |  2,542 MB/s | 41.0 |  6,199 MB/s | 0.62x |
-| zstd -1           |  1,809 MB/s | 34.5 |  5,239 MB/s | 0.52x |
-
-*All ZXC paliers stay between 1.48x and 2.03x LZ4 effective bandwidth. ZXC -6 leads `lz4hc -9` by **1.26x** at equivalent ratio — Apple Silicon's deep pipelines amplify ZXC's advantage on every level.*
-
 ### 2. Cloud Server: Google Axion (ARM Neoverse V2)
 *Scenario: High-throughput Microservices, ARM Cloud Instances.*
 
@@ -102,22 +86,6 @@ We monitor metrics on both **x86_64** (Linux) and **ARM64** (Apple Silicon M2) r
 | **3. High Density** | **ZXC -5** vs *Zstd --fast 1* | **4,685 MB/s** vs 2,295 MB/s **2.04x Faster** | **40.3** vs 41.0 **Equivalent** (-0.7%) | **ZXC** outperforms Zstd in decoding speed. |
 | **4. Max Density** | **ZXC -6** vs *lz4hc -9* | **4,205 MB/s** vs 3,849 MB/s **1.09x Faster** | **36.3** vs 36.8 **Smaller** (-0.5%) | **ZXC** beats lz4hc on both decode speed and ratio. |
 
-**Effective Throughput** *(ratio-normalized decode — original MB/s delivered per unit of compressed input bandwidth, `decode × 100/ratio`)*
-
-| Compressor | Decode | Ratio | Effective | vs LZ4 |
-| :--- | ---: | ---: | ---: | ---: |
-| **ZXC -1** | 9,067 MB/s | 61.5 | **14,744 MB/s** | **1.65x** |
-| **ZXC -3** | 5,297 MB/s | 45.8 | **11,569 MB/s** | **1.29x** |
-| **ZXC -5** | 4,685 MB/s | 40.3 | **11,634 MB/s** | **1.30x** |
-| **ZXC -6** | 4,205 MB/s | 36.3 | **11,591 MB/s** | **1.30x** |
-| lz4 (Ref)         | 4,259 MB/s | 47.6 | 8,948 MB/s | 1.00x |
-| lz4 --fast -17    | 4,951 MB/s | 62.2 | 7,966 MB/s | 0.89x |
-| lz4hc -9          | 3,849 MB/s | 36.8 | 10,473 MB/s | 1.17x |
-| zstd --fast --1   | 2,295 MB/s | 41.0 | 5,596 MB/s | 0.63x |
-| zstd -1           | 1,645 MB/s | 34.5 | 4,764 MB/s | 0.53x |
-
-*All ZXC paliers stay above 1.29x LZ4 in effective bandwidth — combining fast decode and tighter ratio. ZXC -6 delivers 1.11x more effective bandwidth than `lz4hc -9` at equivalent ratio.*
-
 ### 3. Build Server: x86_64 (AMD EPYC 9B45)
 *Scenario: CI/CD Pipelines compatibility.*
 
@@ -127,22 +95,6 @@ We monitor metrics on both **x86_64** (Linux) and **ARM64** (Apple Silicon M2) r
 | **2. Standard** | **ZXC -3** vs *LZ4 Default* | **5,955 MB/s** vs 5,013 MB/s **1.19x Faster** | **45.8** vs 47.6 **Smaller** (-1.8%) | **ZXC** offers improved speed and ratio. |
 | **3. High Density** | **ZXC -5** vs *Zstd --fast 1* | **5,259 MB/s** vs 2,407 MB/s **2.18x Faster** | **40.3** vs 41.0 **Smaller** (-0.7%) | **ZXC** provides faster decoding. |
 | **4. Max Density** | **ZXC -6** vs *lz4hc -9* | 4,695 MB/s vs **4,841 MB/s** **0.97x** | **36.3** vs 36.8 **Smaller** (-0.5%) | **Equivalent** decode (~3% slower), **ZXC** wins on ratio. |
-
-**Effective Throughput** *(ratio-normalized decode — original MB/s delivered per unit of compressed input bandwidth, `decode × 100/ratio`)*
-
-| Compressor | Decode | Ratio | Effective | vs LZ4 |
-| :--- | ---: | ---: | ---: | ---: |
-| **ZXC -1** | 10,844 MB/s | 61.5 | **17,633 MB/s** | **1.67x** |
-| **ZXC -3** |  5,955 MB/s | 45.8 | **13,005 MB/s** | **1.23x** |
-| **ZXC -5** |  5,259 MB/s | 40.3 | **13,059 MB/s** | **1.24x** |
-| **ZXC -6** |  4,695 MB/s | 36.3 | **12,941 MB/s** | **1.23x** |
-| lz4 (Ref)         |  5,013 MB/s | 47.6 | 10,532 MB/s | 1.00x |
-| lz4 --fast -17    |  5,301 MB/s | 62.2 |  8,530 MB/s | 0.81x |
-| lz4hc -9          |  4,841 MB/s | 36.8 | 13,173 MB/s | 1.25x |
-| zstd --fast --1   |  2,407 MB/s | 41.0 |  5,870 MB/s | 0.56x |
-| zstd -1           |  1,868 MB/s | 34.5 |  5,410 MB/s | 0.51x |
-
-*All ZXC paliers stay between 1.23x and 1.67x LZ4 on x86_64. On this platform, `lz4hc -9` (1.25x) edges out ZXC -6 (1.23x) — its decoder is ~3% faster while the ratio gap stays minimal. The two are practically tied at the dense end on EPYC.*
 
 
 *(Benchmark Graph ARM64 : Decompression Throughput & Storage Ratio (Normalized to LZ4))*
