@@ -503,7 +503,7 @@ Benchmarks were conducted using `lzbench` (by inikep) with a **block size of 256
 
 **Figure A**: Decompression Throughput & Storage Ratio (Normalized to LZ4)
 
-![Benchmark Graph ARM64](./images/benchmark_arm64_0.11.0.webp)
+![Benchmark Graph ARM64](./images/bench-arm64-0.11.0.webp)
 
 
 ### 7.1 Client ARM64 Summary (Apple Silicon M2)
@@ -772,11 +772,11 @@ This metric expresses how much *original* data is delivered per unit of compress
 
 **Figure B**: Decompression Efficiency : Cycles Per Byte Comparaison
 
-![Benchmark Cycles Per Byte](./images/benchmark_decompression_cycles_0.11.0.webp)
+![Benchmark Cycles Per Byte](./images/bench-cycles-0.11.0.webp)
 
 **Figure C**: Effective Throughput — Ratio-Normalized Decode (vs LZ4 baseline = 1.00x)
 
-![Effective Throughput vs LZ4](./images/benchmark_effective_throughput_0.11.0.webp)
+![Effective Throughput vs LZ4](./images/bench-effective-0.11.0.webp)
 
 
 #### 7.5.1 ARM64 Architecture (Apple Silicon M2)
