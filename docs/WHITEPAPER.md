@@ -500,8 +500,13 @@ Benchmarks were conducted using `lzbench` (by inikep) with a **block size of 256
 * **Target 1 (Client):** Apple M2 / macOS 26 (Clang 21)
 * **Target 2 (Cloud):** Google Axion / Linux (GCC 14)
 * **Target 3 (Build):** AMD EPYC 9B45 / Linux (GCC 14)
+* **Target 4 (Production):** AMD EPYC 7763 / Linux (GCC 14)
 
-**Figure A**: Decompression Bandwidth Frontier — ZXC vs. State-of-the-Art across ARM64 & x86_64
+**Figure A**: ZXC vs LZ4 family — Decode speedup and size reduction across 4 CPUs (headline result)
+
+![ZXC vs LZ4 Dominance](./images/bench-dominance-0.11.0.webp)
+
+**Figure B**: Decompression Bandwidth Frontier — ZXC envelope vs. competitor envelope across ARM64 & x86_64
 
 ![Decompression Bandwidth Frontier](./images/bench-frontier-0.11.0.webp)
 
@@ -568,7 +573,7 @@ Benchmarks were conducted using `lzbench` (by inikep) with a **block size of 256
 
 *Higher is better. Captures how much *original* data is delivered per unit of compressed input bandwidth. Formula: `Effective (MB/s) = Decompression Speed × 100 / Compression Ratio (%)`.*
 
-*Reading: on Apple M2, ZXC's full level range delivers between **1.53x** and **2.03x** LZ4 effective bandwidth. ZXC -6 (15 490 MB/s, 1.54x LZ4) clearly leads `lz4hc -9` (12 321 MB/s, 1.23x) on this platform — **1.26x more effective bandwidth at equivalent ratio**. Apple Silicon's deep pipelines amplify ZXC's lead at every palier.*
+*Reading: on Apple M2, ZXC's full level range delivers between **1.53x** and **2.03x** LZ4 effective bandwidth. ZXC -6 (15 490 MB/s, 1.54x LZ4) clearly leads `lz4hc -9` (12 321 MB/s, 1.23x) on this platform — **1.26x more effective bandwidth at equivalent ratio**. Apple Silicon's deep pipelines amplify ZXC's lead at every level.*
 
 
 ### 7.2 Cloud Server Summary (ARM64 / Google Axion Neoverse-V2)
@@ -635,7 +640,7 @@ This metric expresses how much *original* data is delivered per unit of compress
 
 *Higher is better. Captures how much *original* data is delivered per unit of compressed input bandwidth. Formula: `Effective (MB/s) = Decompression Speed × 100 / Compression Ratio (%)`.*
 
-*Reading: at ZXC -6, every MB/s of compressed input yields **11 591 MB/s** of original output — **1.11x** more effective bandwidth than `lz4hc -9` at equivalent ratio (36.28 vs 36.75), and **1.30x** more than LZ4 default. ZXC's full level range stays above 1.29x LZ4 across all paliers.*
+*Reading: at ZXC -6, every MB/s of compressed input yields **11 591 MB/s** of original output — **1.11x** more effective bandwidth than `lz4hc -9` at equivalent ratio (36.28 vs 36.75), and **1.30x** more than LZ4 default. ZXC's full level range stays above 1.29x LZ4 across all levels.*
 
 
 ### 7.3 Build Server Summary (x86_64 / AMD EPYC 9B45)
@@ -703,7 +708,7 @@ This metric expresses how much *original* data is delivered per unit of compress
 *Reading: on EPYC 9B45, ZXC's full level range delivers between 1.23x and 1.70x LZ4 effective bandwidth. Note that on this x86_64 platform `lz4hc -9` (1.25x) edges out ZXC -6 (1.23x) on this metric — lz4hc's decode (4 841 MB/s) runs ~3% faster than ZXC -6 (4 695 MB/s) here, while ZXC -6 keeps the ratio advantage (36.28 vs 36.75). The two are practically tied on this platform.*
 
 
-### 7.4 Reference x86 Summary (AMD EPYC 7763, Zen 3)
+### 7.4 Production x86 Summary (AMD EPYC 7763, Zen 3)
 
 | Compressor | Decompression Speed (Ratio vs LZ4) | Compressed Size (Index LZ4=100) (Lower is Better) |
 | :--- | :--- | :--- |
@@ -765,16 +770,16 @@ This metric expresses how much *original* data is delivered per unit of compress
 
 *Higher is better. Captures how much *original* data is delivered per unit of compressed input bandwidth. Formula: `Effective (MB/s) = Decompression Speed × 100 / Compression Ratio (%)`.*
 
-*Reading: on EPYC 7763 (Zen 3), ZXC's full level range delivers between 1.15x and 1.54x LZ4 effective bandwidth. Like on EPYC 9B45, `lz4hc -9` (1.24x) slightly edges out ZXC -6 (1.18x) at the densest palier on this older Zen 3 microarchitecture — its decoder is ~6% faster while the ratio gap stays minimal. ZXC's lead is preserved on the speed-oriented paliers (-1 to -2) where the bitstream layout amortizes well over the EPYC 7763 pipeline.*
+*Reading: on EPYC 7763 (Zen 3), ZXC's full level range delivers between 1.15x and 1.54x LZ4 effective bandwidth. Like on EPYC 9B45, `lz4hc -9` (1.24x) slightly edges out ZXC -6 (1.18x) at the densest level on this older Zen 3 microarchitecture — its decoder is ~6% faster while the ratio gap stays minimal. ZXC's lead is preserved on the speed-oriented levels (-1 to -2) where the bitstream layout amortizes well over the EPYC 7763 pipeline.*
 
 
 ### 7.5 Benchmarks Results
 
-**Figure B**: Decompression Efficiency : Cycles Per Byte Comparaison
+**Figure C**: Decompression Efficiency : Cycles Per Byte Comparaison
 
 ![Benchmark Cycles Per Byte](./images/bench-cycles-0.11.0.webp)
 
-**Figure C**: Effective Throughput — Ratio-Normalized Decode (vs LZ4 baseline = 1.00x)
+**Figure D**: Effective Throughput — Ratio-Normalized Decode (vs LZ4 baseline = 1.00x)
 
 ![Effective Throughput vs LZ4](./images/bench-effective-0.11.0.webp)
 
@@ -890,6 +895,29 @@ Benchmarks were conducted using lzbench 2.2.1 (from @inikep), compiled with GCC 
 *Levels -1 to -5 share the same context layout (LZ77 hash + chain + sequence / literal buffers) and scale linearly with block size. Level -6 (DENSITY) lazily allocates the optimal-parser scratch (per-position DP cost, parent length / offset, packed match-end bitmap), adding ~×3 overhead. Exact values for any (block, level) combination are reproducible via the public API call `zxc_estimate_cctx_size(block_size, level)`.*
 
 > **Guideline:** Default 512 KB block keeps cctx under 6 MB even at the densest level (-6) — well within reach for typical server / desktop pipelines. For streaming, embedded, or memory-constrained environments, use `-B 256K` (or smaller) and stick to levels -1 to -5. Level -6 is best reserved for offline encoding pipelines where ratio matters and per-thread RAM is plentiful.
+
+
+### 7.7 Appendix — Pareto Analysis (Research-grade Views)
+
+The previous sections cover the headline pitch (ZXC vs LZ4 family per tier and per CPU). This appendix complements that view with three complementary "research-grade" perspectives commonly used in compression literature: a normalized scatter, formal Pareto frontiers per CPU, and a Pareto-efficiency robustness count.
+
+**Figure E**: Normalized decode speed and compressed size — every codec, every CPU, both axes normalized to LZ4 default of the same CPU.
+
+![ZXC vs the rest — Normalized scatter](./images/bench-normalized-0.11.0.webp)
+
+*Reading: LZ4 default sits at the origin (100, 1.00×). The 4 ZXC curves (one per CPU) cross the LZ4 baseline diagonally, descending through the L1 → L6 progression. ZXC stays above the lz4 family's own dashed curve at every comparable ratio bracket on all 4 CPUs.*
+
+**Figure F**: Per-CPU Pareto fronts (decode speed vs compressed size). Codecs on the frontier are Pareto-optimal; codecs below the frontier are dominated.
+
+![Pareto Fronts per CPU](./images/bench-pareto-fronts-0.11.0.webp)
+
+*Reading: every ZXC variant sits on or near the Pareto frontier across all 4 CPUs. The only non-ZXC codecs that join the frontier are `zstd -1` (smallest ratio bracket) and `lz4 --fast -17` (largest ratio bracket) — ZXC owns every operating point in between.*
+
+**Figure G**: Pareto-efficiency robustness — for every codec, count of (CPU × tradeoff plane) combinations on which it sits on the Pareto frontier (out of 16 = 4 CPUs × 4 planes).
+
+![Pareto Efficiency](./images/bench-pareto-efficiency-0.11.0.webp)
+
+*Reading: ZXC variants dominate the robustness ranking, sitting on the Pareto frontier in 12 to 16 of the 16 combinations. Non-ZXC codecs typically max out at 4-8 wins, and only at the extreme ends (lz4 --fast for speed, zstd -1 for ratio).*
 
 
 ## 8. Strategic Implementation

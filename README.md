@@ -65,8 +65,10 @@ We monitor metrics on both **x86_64** (Linux) and **ARM64** (Apple Silicon M2) r
 
 *(See the [latest benchmark logs](https://github.com/hellobertrand/zxc/actions/workflows/benchmark.yml))*
 
-*(Decompression Bandwidth Frontier : ZXC vs. State-of-the-Art across ARM64 & x86_64)*
-![Decompression Bandwidth Frontier](docs/images/bench-frontier-0.11.0.webp)
+*(ZXC vs LZ4 family : decode speedup and compressed-size reduction across 4 CPUs and 3 deployment tiers)*
+![ZXC vs LZ4 Dominance](docs/images/bench-dominance-0.11.0.webp)
+
+**Across 4 CPUs × 3 deployment tiers, ZXC wins on both decode speed and ratio versus the LZ4 family**, the only nuance: at the densest tier, x86 decode trails `lz4hc -9` by 3–6% while keeping a smaller compressed size.
 
 ### 1. Mobile & Client: Apple Silicon (M2)
 *Scenario: Game Assets loading, App startup.*
@@ -75,8 +77,7 @@ We monitor metrics on both **x86_64** (Linux) and **ARM64** (Apple Silicon M2) r
 | :--- | :--- | :--- | :--- | :--- |
 | **1. Max Speed** | **ZXC -1** vs *LZ4 --fast* | **12,530 MB/s** vs 5,623 MB/s **2.23x Faster** | **61.5** vs 62.2 **Smaller** (-0.7%) | **ZXC** leads in raw throughput. |
 | **2. Standard** | **ZXC -3** vs *LZ4 Default* | **7,049 MB/s** vs 4,783 MB/s **1.47x Faster** | **45.8** vs 47.6 **Smaller** (-1.8%) | **ZXC** outperforms LZ4 in read speed and ratio. |
-| **3. High Density** | **ZXC -5** vs *Zstd --fast 1* | **6,267 MB/s** vs 2,538 MB/s **2.47x Faster** | **40.3** vs 41.0 **Equivalent** (-0.7%) | **ZXC** outperforms Zstd in decoding speed. |
-| **4. Max Density** | **ZXC -6** vs *lz4hc -9* | **5,620 MB/s** vs 4,528 MB/s **1.24x Faster** | **36.3** vs 36.8 **Smaller** (-0.5%) | **ZXC** beats lz4hc on both decode speed and ratio. |
+| **3. Max Density** | **ZXC -6** vs *LZ4HC -9* | **5,620 MB/s** vs 4,528 MB/s **1.24x Faster** | **36.3** vs 36.8 **Smaller** (-0.5%) | **ZXC** beats LZ4HC on both decode speed and ratio. |
 
 ### 2. Cloud Server: Google Axion (ARM Neoverse V2)
 *Scenario: High-throughput Microservices, ARM Cloud Instances.*
@@ -85,8 +86,7 @@ We monitor metrics on both **x86_64** (Linux) and **ARM64** (Apple Silicon M2) r
 | :--- | :--- | :--- | :--- | :--- |
 | **1. Max Speed** | **ZXC -1** vs *LZ4 --fast* | **9,067 MB/s** vs 4,951 MB/s **1.83x Faster** | **61.5** vs 62.2 **Smaller** (-0.7%) | **ZXC** leads in raw throughput. |
 | **2. Standard** | **ZXC -3** vs *LZ4 Default* | **5,297 MB/s** vs 4,259 MB/s **1.24x Faster** | **45.8** vs 47.6 **Smaller** (-1.8%) | **ZXC** outperforms LZ4 in read speed and ratio. |
-| **3. High Density** | **ZXC -5** vs *Zstd --fast 1* | **4,685 MB/s** vs 2,295 MB/s **2.04x Faster** | **40.3** vs 41.0 **Equivalent** (-0.7%) | **ZXC** outperforms Zstd in decoding speed. |
-| **4. Max Density** | **ZXC -6** vs *lz4hc -9* | **4,205 MB/s** vs 3,849 MB/s **1.09x Faster** | **36.3** vs 36.8 **Smaller** (-0.5%) | **ZXC** beats lz4hc on both decode speed and ratio. |
+| **3. Max Density** | **ZXC -6** vs *LZ4HC -9* | **4,205 MB/s** vs 3,849 MB/s **1.09x Faster** | **36.3** vs 36.8 **Smaller** (-0.5%) | **ZXC** beats LZ4HC on both decode speed and ratio. |
 
 ### 3. Build Server: x86_64 (AMD EPYC 9B45)
 *Scenario: CI/CD Pipelines compatibility.*
@@ -95,9 +95,20 @@ We monitor metrics on both **x86_64** (Linux) and **ARM64** (Apple Silicon M2) r
 | :--- | :--- | :--- | :--- | :--- |
 | **1. Max Speed** | **ZXC -1** vs *LZ4 --fast* | **10,844 MB/s** vs 5,301 MB/s **2.05x Faster** | **61.5** vs 62.2 **Smaller** (-0.7%) | **ZXC** achieves higher throughput. |
 | **2. Standard** | **ZXC -3** vs *LZ4 Default* | **5,955 MB/s** vs 5,013 MB/s **1.19x Faster** | **45.8** vs 47.6 **Smaller** (-1.8%) | **ZXC** offers improved speed and ratio. |
-| **3. High Density** | **ZXC -5** vs *Zstd --fast 1* | **5,259 MB/s** vs 2,407 MB/s **2.18x Faster** | **40.3** vs 41.0 **Smaller** (-0.7%) | **ZXC** provides faster decoding. |
-| **4. Max Density** | **ZXC -6** vs *lz4hc -9* | 4,695 MB/s vs **4,841 MB/s** **0.97x** | **36.3** vs 36.8 **Smaller** (-0.5%) | **Equivalent** decode (~3% slower), **ZXC** wins on ratio. |
+| **3. Max Density** | **ZXC -6** vs *LZ4HC -9* | 4,695 MB/s vs **4,841 MB/s** (decode within 3%) | **36.3** vs 36.8 **Smaller** (-0.5%) | **ZXC** wins on ratio; decode trails `LZ4HC -9` by ~3%. |
 
+### 4. Production x86 Server: AMD EPYC 7763 (Zen 3)
+*Scenario: Mainstream cloud workloads (AWS c6a, Azure HBv3, GCP n2d).*
+
+| Target | ZXC vs Competitor | Decompression Speed | Ratio | Verdict |
+| :--- | :--- | :--- | :--- | :--- |
+| **1. Max Speed** | **ZXC -1** vs *LZ4 --fast* | **7,077 MB/s** vs 4,092 MB/s **1.73x Faster** | **61.5** vs 62.2 **Smaller** (-0.7%) | **ZXC** holds a strong lead on the legacy x86 pipeline. |
+| **2. Standard** | **ZXC -3** vs *LZ4 Default* | **3,922 MB/s** vs 3,546 MB/s **1.11x Faster** | **45.8** vs 47.6 **Smaller** (-1.8%) | **ZXC** delivers faster decode and smaller output. |
+| **3. Max Density** | **ZXC -6** vs *LZ4HC -9* | 3,196 MB/s vs **3,401 MB/s** (decode within 6%) | **36.3** vs 36.8 **Smaller** (-0.5%) | **ZXC** wins on ratio; decode trails `LZ4HC -9` by ~6% on Zen 3. |
+
+
+*(Decompression Bandwidth Frontier : ZXC envelope vs. competitor envelope across ARM64 & x86_64 — the shaded blue area is the "ZXC dominance region")*
+![Decompression Bandwidth Frontier](docs/images/bench-frontier-0.11.0.webp)
 
 *(Effective Throughput : Ratio-Normalized Decode across ARM64 and x86 — `decode × 100 / ratio`, LZ4 baseline = 1.00x)*
 ![Effective Throughput vs LZ4](docs/images/bench-effective-0.11.0.webp)
@@ -106,7 +117,7 @@ We monitor metrics on both **x86_64** (Linux) and **ARM64** (Apple Silicon M2) r
 >
 > Raw decode speed misses half the picture: in real workloads (asset streaming, container pulls, microservice payloads), the decoder is fed by a compressed-byte source - disk, network, inter-core - whose bandwidth is the bottleneck. The right question is *how much original data is delivered per MB of compressed input*.
 >
-> Formula: `Effective (MB/s) = Decode × 100 / Ratio (%)`: combines decode speed and ratio in one number. **Every ZXC palier sits above LZ4** on every architecture, peaking at **2.0x on Apple Silicon** and ranging **1.15x–1.70x** on x86 and ARM cloud platforms.
+> Formula: `Effective (MB/s) = Decode × 100 / Ratio (%)`: combines decode speed and ratio in one number. **Every ZXC level sits above LZ4** on every architecture, peaking at **2.0x on Apple Silicon** and ranging **1.15x–1.70x** on x86 and ARM cloud platforms.
 
 
 ### Benchmark ARM64 (Apple Silicon M2)
